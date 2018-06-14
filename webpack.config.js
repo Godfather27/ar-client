@@ -1,4 +1,5 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 const path = require('path');
 
 module.exports = {
@@ -8,6 +9,10 @@ module.exports = {
     path: path.resolve(__dirname, 'dist')
   },
   plugins: [
+    new webpack.SourceMapDevToolPlugin({
+      filename: '[name].js.map',
+      exclude: ['vendor.js']
+    }),
     new HtmlWebpackPlugin({
       title: "ar client",
       template: "src/index.html",

@@ -49,8 +49,48 @@
         border-collapse: collapse;
         border-spacing: 0;
       }
+      
+      * {
+        user-select: none;
+      }
+      button {
+        position: absolute;
+        bottom: 10px;
+        width: 75px;
+        height: 75px;
+        border-radius: 50%;
+        background: white;
+        border: none;
+      }
+      button:focus {
+        outline: none;
+      }
+      #spawn {
+        right: 10px;
+      }
+      #delete {
+        right: 95px;
+      }
+      #reset {
+        left: 10px;
+      }
+      #focus {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: 2px black solid;
+        background: none;
+      }
   </style>
 </head>
 <body>
+  <div id="focus"></div>
+  <button id="reset">reset</button>
+  <button id="spawn">spawn cube</button>
+  <button id="delete">delete cube</button>
 </body>
 </html>

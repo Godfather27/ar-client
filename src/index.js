@@ -1,6 +1,15 @@
 import {
   WebGLRenderer,
   Scene,
+  BoxGeometry,
+  Geometry,
+  DoubleSide,
+  MeshPhongMaterial,
+  MeshBasicMaterial,
+  Raycaster,
+  Mesh,
+  Vector3,
+  Face3,
 } from 'three'
 import {
   ARUtils,
@@ -9,61 +18,33 @@ import {
 } from 'three.ar.js';
 import VRControls from './VRControls'
 
-let vrDisplay;
-let vrControls;
-let arView;
-let camera;
-let renderer;
-let scene;
-// Drawing constants.
+const SCALE_FACTOR = 1.5;
+const MARKER_SIZE = new Vector3(0.05, 0.05, 0.05);
+const HIGHLIGHT_COLOR = 0xffffff;
+const createCubeButton = document.querySelector('#spawn')
+const deleteCubeButton = document.querySelector('#delete')
+const resetButton = document.querySelector('#reset')
 
-/**
- * Use the `getARDisplay()` utility to leverage the WebVR API
- * to see if there are any AR-capable WebVR VRDisplays. Returns
- * a valid display if found. Otherwise, display the unsupported
- * browser message.
- */
-ARUtils.getARDisplay()
-  .then((display) => {
-    if (display) {
-      vrDisplay = display;
-      init();
-    } else {
-      ARUtils.displayUnsupportedMessage();
-    }
-  });
+let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, selected;
+let touching = false;
+let moving = false;
+let canvasPoints = [];
+let canvasMarkers = [];
 
-function init() {
-  screen.lockOrientationUniversal = screen.lockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-  if(screen.lockOrientationUniversal && window.screen.lockOrientationUniversal("portrait")){
-    console.log('locked screen to portrait')
+async function init() {
+  let display = await ARUtils.getARDisplay()
+  if (display) {
+    vrDisplay = display;
   } else {
-    console.log('no lock capability')
-  };
-  // Setup the three.js rendering environment
-  createCanvas();
+    ARUtils.displayUnsupportedMessage();
+    return;
+  }
+  createCanvas()
   scene = new Scene();
-  // Creating the ARView, which is the object that handles
-  // the rendering of the camera stream behind the three.js
-  // scene
   arView = new ARView(vrDisplay, renderer);
-  // The ARPerspectiveCamera is very similar to PerspectiveCamera,
-  // except when using an AR-capable browser, the camera uses
-  // the projection matrix provided from the device, so that the
-  // perspective camera's depth planes and field of view matches
-  // the physical camera on the device.
   camera = new ARPerspectiveCamera(vrDisplay, 60, window.innerWidth / window.innerHeight, 0.01, 100);
-  // VRControls is a utility from three.js that applies the device's
-  // orientation/position to the perspective camera, keeping our
-  // real world and virtual world in sync.
   vrControls = new VRControls(camera);
-
-  // Bind our event handlers
-  window.addEventListener('resize', onWindowResize, false);
-  // Start drawing when the user touches the screen.
-  renderer.domElement.addEventListener('touchstart', onTouchStart);
-  // Stop the current draw stroke when the user finishes the touch.
-  renderer.domElement.addEventListener('touchend', onTouchEnd);
+  RegisterListeners(renderer.domElement)
 
   update();
 }
@@ -75,6 +56,16 @@ function createCanvas() {
   renderer.autoClear = false;
   renderer.domElement;
   document.body.appendChild(renderer.domElement);
+}
+
+function RegisterListeners(threeCanvas) {
+  window.addEventListener('resize', onWindowResize, false);
+  createCubeButton.addEventListener('touchstart', createCube);
+  createCubeButton.addEventListener('touchend', endCubeScaling);
+  deleteCubeButton.addEventListener('touchend', deleteMesh);
+  resetButton.addEventListener('touchend', reset);
+  threeCanvas.addEventListener('touchstart', onTouchStart);
+  threeCanvas.addEventListener('touchend', onTouchEnd);
 }
 
 /**
@@ -96,18 +87,14 @@ function update() {
   // Update our perspective camera's positioning
   vrControls.update();
 
-  // Update Brush Physics
-  // updatePhysics();
+  if(touching)
+    growCube()
 
-  // Check for shake to undo functionality
-  // checkForShake();
+  if(selected && moving)
+    moveCube()
 
-  // Update the current graffiti stroke.
-  // if (drawing) {
-  //   processDraw();
-  // }
-  // Uncomment to draw brush reticle
-  // processDrawBrush();
+  if(!moving)
+    selectCube()
 
   // Render our three.js virtual scene
   renderer.clearDepth();
@@ -118,22 +105,141 @@ function update() {
   vrDisplay.requestAnimationFrame(update);
 }
 
-/**
- * On window resize, update the perspective camera's aspect ratio,
- * and call `updateProjectionMatrix` so that we can get the latest
- * projection matrix provided from the device
- */
+function selectCube() {
+  const raycaster = new Raycaster(camera.position, camera.getWorldDirection(new Vector3()))
+  const intersections = raycaster.intersectObjects( scene.children )
+
+  // reset cube color to default
+  if(selected && (!intersections.length || selected.uuid !== intersections[0].object.uui)) {
+    selected.material.color.setHex(selected.material.defaultColor);
+    selected = null;
+  }
+
+  // select and highlight cube
+  if(intersections.length){
+    selected = intersections[0].object;
+    selected.material.color.setHex(HIGHLIGHT_COLOR);
+  }
+}
+
+function cubeFactory(size, spawnPosition=null) {
+  let geometry = new BoxGeometry( size.x, size.y, size.z );
+  let material = new MeshBasicMaterial( { color: 0x00ff00 } );
+  material.defaultColor = 0x00ff00;
+  let cube = new Mesh( geometry, material );
+  scene.add( cube );
+
+  // set cube position relative to camera
+  let cameraDirection = camera.getWorldDirection(new Vector3())
+  spawnPosition = spawnPosition ? spawnPosition : {
+    x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
+    y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
+    z: camera.position.z + cameraDirection.z * SCALE_FACTOR
+  }
+  cube.position.set(spawnPosition.x, spawnPosition.y, spawnPosition.z)
+  return cube;
+}
+
+function moveCube() {
+  let cameraDirection = camera.getWorldDirection(new Vector3())
+  let spawnPosition = {
+    x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
+    y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
+    z: camera.position.z + cameraDirection.z * SCALE_FACTOR
+  }
+  selected.position.set(spawnPosition.x, spawnPosition.y, spawnPosition.z)
+}
+
+function growCube() {
+  newCube.geometry.scale(1.015, 1.015, 1.015)
+}
+
+function setCanvasPoint() {
+  let cameraDirection = camera.getWorldDirection(new Vector3())
+  let point = new Vector3(
+    camera.position.x + cameraDirection.x * SCALE_FACTOR,
+    camera.position.y + cameraDirection.y * SCALE_FACTOR,
+    camera.position.z + cameraDirection.z * SCALE_FACTOR
+  )
+  canvasPoints.push(point)
+  canvasMarkers.push(cubeFactory(MARKER_SIZE, point))
+
+  if(canvasPoints.length === 4) {
+    createCanvasPlane()
+    removeCanvasMarker()
+    canvasPoints.length = 0;
+  }
+}
+
+function removeCanvasMarker() {
+  canvasMarkers.forEach(deleteMesh)
+  canvasMarkers.length = 0;
+}
+
+function createCanvasPlane() {
+  let geometry = new Geometry();
+  geometry.vertices.push(...canvasPoints);
+  geometry.faces.push(
+    new Face3( 0, 1, 2),
+    new Face3( 2, 3, 0)
+  );
+  let material = new MeshBasicMaterial( { color: 0xffff00, side: DoubleSide } );
+  material.defaultColor = 0xffff00
+  let canvasMesh = new Mesh( geometry, material );
+  scene.add( canvasMesh );
+
+  return canvasMesh;
+}
+
+// EVENT FUNCTIONS
 function onWindowResize () {
-  console.log('RESIZE')
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function onTouchStart() {
-  console.log("DRAWING START")
+  if(selected){
+    moving = true;
+  } else {
+    setCanvasPoint();
+  }
 }
 
 function onTouchEnd() {
-  console.log("DRAWING END")
+  moving = false;
 }
+
+function createCube() {
+  touching = true;
+  newCube = cubeFactory({
+    x: 0.1,
+    y: 0.1,
+    z: 0.1
+  });
+}
+
+function endCubeScaling() {
+  touching = false;
+}
+
+function deleteMesh(mesh) {
+  if(mesh){
+    if(!mesh.isMesh){
+      mesh = selected
+      selected = undefined
+    }
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+    mesh = undefined;
+  }
+}
+
+function reset(){
+  location.reload();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  init();
+});
