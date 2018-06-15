@@ -18,7 +18,7 @@ import {
 } from 'three.ar.js';
 import VRControls from './VRControls'
 
-const SCALE_FACTOR = 1.5;
+const SCALE_FACTOR = 1;
 const MARKER_SIZE = new Vector3(0.05, 0.05, 0.05);
 const HIGHLIGHT_COLOR = 0xffffff;
 const createCubeButton = document.querySelector('#spawn')
@@ -44,7 +44,7 @@ async function init() {
   arView = new ARView(vrDisplay, renderer);
   camera = new ARPerspectiveCamera(vrDisplay, 60, window.innerWidth / window.innerHeight, 0.01, 100);
   vrControls = new VRControls(camera);
-  RegisterListeners(renderer.domElement)
+  RegisterListeners()
 
   update();
 }
@@ -58,14 +58,14 @@ function createCanvas() {
   document.body.appendChild(renderer.domElement);
 }
 
-function RegisterListeners(threeCanvas) {
+function RegisterListeners() {
   window.addEventListener('resize', onWindowResize, false);
   createCubeButton.addEventListener('touchstart', createCube);
   createCubeButton.addEventListener('touchend', endCubeScaling);
   deleteCubeButton.addEventListener('touchend', deleteMesh);
   resetButton.addEventListener('touchend', reset);
-  threeCanvas.addEventListener('touchstart', onTouchStart);
-  threeCanvas.addEventListener('touchend', onTouchEnd);
+  renderer.domElement.addEventListener('touchstart', onTouchStart);
+  renderer.domElement.addEventListener('touchend', onTouchEnd);
 }
 
 /**
@@ -122,10 +122,10 @@ function selectCube() {
   }
 }
 
-function cubeFactory(size, spawnPosition=null) {
+function cubeFactory({size, spawnPosition=null, color=0x00ff00}) {
   let geometry = new BoxGeometry( size.x, size.y, size.z );
-  let material = new MeshBasicMaterial( { color: 0x00ff00 } );
-  material.defaultColor = 0x00ff00;
+  let material = new MeshBasicMaterial( { color } );
+  material.defaultColor = color;
   let cube = new Mesh( geometry, material );
   scene.add( cube );
 
@@ -162,7 +162,11 @@ function setCanvasPoint() {
     camera.position.z + cameraDirection.z * SCALE_FACTOR
   )
   canvasPoints.push(point)
-  canvasMarkers.push(cubeFactory(MARKER_SIZE, point))
+  canvasMarkers.push(cubeFactory({
+    size: MARKER_SIZE,
+    spawnPosition: point,
+    color: 0xff0000
+  }))
 
   if(canvasPoints.length === 4) {
     createCanvasPlane()
@@ -180,14 +184,13 @@ function createCanvasPlane() {
   let geometry = new Geometry();
   geometry.vertices.push(...canvasPoints);
   geometry.faces.push(
-    new Face3( 0, 1, 2),
-    new Face3( 2, 3, 0)
+    new Face3(0, 1, 2),
+    new Face3(2, 3, 0)
   );
-  let material = new MeshBasicMaterial( { color: 0xffff00, side: DoubleSide } );
+  let material = new MeshBasicMaterial({color: 0xffff00, side: DoubleSide});
   material.defaultColor = 0xffff00
-  let canvasMesh = new Mesh( geometry, material );
-  scene.add( canvasMesh );
-
+  let canvasMesh = new Mesh(geometry, material);
+  scene.add(canvasMesh);
   return canvasMesh;
 }
 
@@ -213,9 +216,11 @@ function onTouchEnd() {
 function createCube() {
   touching = true;
   newCube = cubeFactory({
-    x: 0.1,
-    y: 0.1,
-    z: 0.1
+    size: {
+      x: 0.1,
+      y: 0.1,
+      z: 0.1
+    }
   });
 }
 
