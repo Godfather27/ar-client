@@ -5,10 +5,11 @@ import {
   BoxGeometry,
   Geometry,
   DoubleSide,
-  MeshPhongMaterial,
+  LineBasicMaterial,
   MeshBasicMaterial,
   Raycaster,
   Mesh,
+  Line,
   Vector3,
   Face3,
 } from 'three';
@@ -18,26 +19,21 @@ import { initializeWebRTC } from './webrtc';
 
 
 
-const SCALE_FACTOR = 1;
-const MARKER_SIZE = new Vector3(0.05, 0.05, 0.05);
+const SCALE_FACTOR = 0.25;
+const MARKER_SIZE = new Vector3(0.01, 0.01, 0.01);
+const raycaster = new Raycaster();
 const HIGHLIGHT_COLOR = 0xffffff;
-const createCubeButton = document.querySelector('#spawn');
-const deleteCubeButton = document.querySelector('#delete');
-const resetButton = document.querySelector('#reset');
+const createCubeButton = document.querySelector('#spawn')
+const deleteCubeButton = document.querySelector('#delete')
+const resetButton = document.querySelector('#reset')
+const drawButton = document.querySelector('#draw')
 
-let vrDisplay,
-  vrControls,
-  arView,
-  camera,
-  renderer,
-  scene,
-  newCube,
-  selected,
-  webrtc;
+let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, selected, lineGeometry, lineMesh, webrtc;
 let touching = false;
 let moving = false;
-const canvasPoints = [];
-const canvasMarkers = [];
+let draw = false;
+let canvasPoints = [];
+let canvasMarkers = [];
 
 async function init() {
   const display = await ARUtils.getARDisplay();
@@ -63,6 +59,18 @@ async function init() {
   vrControls = new VRControls(camera);
   RegisterListeners();
 
+  // LINE
+  lineGeometry = new Geometry();
+  lineGeometry.vertices.push(new Vector3( -10, 0, 0) );
+  lineGeometry.vertices.push(new Vector3( 0, 10, 0) );
+  lineGeometry.vertices.push(new Vector3( 10, 0, 0) );
+  let lineMaterial = new LineBasicMaterial( {
+    color: 0xff0000,
+    linewidth: 1
+  } )
+  lineMaterial.defaultColor = 0xff0000
+  lineMesh = new Line(lineGeometry, lineMaterial);
+  scene.add(lineMesh);
   update();
 }
 
@@ -80,6 +88,7 @@ function RegisterListeners() {
   createCubeButton.addEventListener('touchstart', createCube);
   createCubeButton.addEventListener('touchend', endCubeScaling);
   deleteCubeButton.addEventListener('touchend', deleteMesh);
+  drawButton.addEventListener('touchend', toggleDrawmode);
   resetButton.addEventListener('touchend', reset);
   renderer.domElement.addEventListener('touchstart', onTouchStart);
   renderer.domElement.addEventListener('touchend', onTouchEnd);
@@ -108,7 +117,12 @@ function update() {
 
   if (selected && moving) moveCube();
 
+<<<<<<< HEAD
   if (!moving) selectCube();
+=======
+  if(!moving)
+    cast()
+>>>>>>> add drawing function
 
   // Render our three.js virtual scene
   renderer.clearDepth();
@@ -119,10 +133,31 @@ function update() {
   vrDisplay.requestAnimationFrame(update);
 }
 
+<<<<<<< HEAD
 function selectCube() {
   const raycaster = new Raycaster(camera.position, camera.getWorldDirection(new Vector3()));
   const intersections = raycaster.intersectObjects(scene.children);
+=======
+function cast() {
+  raycaster.set(camera.position, camera.getWorldDirection(new Vector3()))
+  const intersections = raycaster.intersectObjects( scene.children )
+>>>>>>> add drawing function
 
+  selectCube(intersections)
+  if(draw)
+    drawLine(intersections.filter(element => element.object.isDrawable))
+}
+
+function drawLine(intersections) {
+  if(intersections[0]){
+    // WRONG POINTS? WRONG SPACE?
+    console.log(intersections[0].point)
+    lineGeometry.vertices.push(intersections[0].point);
+    lineGeometry.verticesNeedUpdate = true;
+  }
+}
+
+function selectCube(intersections) {
   // reset cube color to default
   if (selected && (!intersections.length || selected.uuid !== intersections[0].object.uui)) {
     selected.material.color.setHex(selected.material.defaultColor);
@@ -140,8 +175,14 @@ function cubeFactory({ size, spawnPosition = null, color = 0x00ff00 }) {
   const geometry = new BoxGeometry(size.x, size.y, size.z);
   const material = new MeshBasicMaterial({ color });
   material.defaultColor = color;
+<<<<<<< HEAD
   const cube = new Mesh(geometry, material);
   scene.add(cube);
+=======
+  let cube = new Mesh( geometry, material );
+  cube.isDrawable = true;
+  scene.add( cube );
+>>>>>>> add drawing function
 
   // set cube position relative to camera
   const cameraDirection = camera.getWorldDirection(new Vector3());
@@ -197,12 +238,25 @@ function removeCanvasMarker() {
 function createCanvasPlane() {
   const geometry = new Geometry();
   geometry.vertices.push(...canvasPoints);
+<<<<<<< HEAD
   geometry.faces.push(new Face3(0, 1, 2), new Face3(2, 3, 0));
   const material = new MeshBasicMaterial({ color: 0xffff00, side: DoubleSide });
   material.defaultColor = 0xffff00;
   const canvasMesh = new Mesh(geometry, material);
   scene.add(canvasMesh);
   return canvasMesh;
+=======
+  geometry.faces.push(
+    new Face3(0, 1, 2),
+    new Face3(2, 3, 0)
+  );
+  let material = new MeshBasicMaterial({color: 0xffff00, side: DoubleSide});
+  material.defaultColor = 0xffff00
+  let mesh = new Mesh(geometry, material);
+  mesh.isDrawable = true;
+  scene.add(mesh);
+  return mesh;
+>>>>>>> add drawing function
 }
 
 // EVENT FUNCTIONS
@@ -246,8 +300,8 @@ function deleteMesh(mesh) {
       selected = undefined;
     }
     scene.remove(mesh);
-    mesh.geometry.dispose();
-    mesh.material.dispose();
+    if(mesh.geometry) mesh.geometry.dispose();
+    if(mesh.material) mesh.material.dispose();
     mesh = undefined;
   }
 }
@@ -256,6 +310,19 @@ function reset() {
   location.reload();
 }
 
+<<<<<<< HEAD
 document.addEventListener('DOMContentLoaded', () => {
+=======
+function toggleDrawmode() {
+  draw = !draw;
+  if(draw) {
+    drawButton.style.background = "#00FF00";
+  } else {
+    drawButton.style.background = "#FFFFFF";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+>>>>>>> add drawing function
   init();
 });

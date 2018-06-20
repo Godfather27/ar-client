@@ -3,6 +3,7 @@ const webpack = require('webpack');
 const path = require('path');
 
 module.exports = {
+  mode: 'development',
   entry: ['babel-polyfill', './src/index.js'],
   output: {
     filename: 'bundle.js',
