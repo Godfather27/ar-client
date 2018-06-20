@@ -18,6 +18,8 @@
     "@babel/core": "^7.0.0-beta.51",
     "@babel/preset-env": "^7.0.0-beta.51",
     "babel-loader": "^8.0.0-beta.3",
+    "console-log-div": "^0.6.3",
+    "simplewebrtc": "^3.0.1",
     "three": "^0.93.0",
     "three.ar.js": "^0.1.8"
   },
