@@ -1,4 +1,3 @@
-console.log("I DID RENDERs")
 import {
   WebGLRenderer,
   Scene,
@@ -35,7 +34,7 @@ let draw = false;
 let canvasPoints = [];
 let canvasMarkers = [];
 
-async function init() {
+ async function init() {
   const display = await ARUtils.getARDisplay();
   if (display) {
     vrDisplay = display;
@@ -44,7 +43,7 @@ async function init() {
     return;
   }
   await createCanvas();
-  initializeWebRTC(renderer, "hallo");
+  //initializeWebRTC(renderer, "hallo");
 
 
   scene = new Scene();
