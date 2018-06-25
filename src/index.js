@@ -43,7 +43,7 @@ let canvasMarkers = [];
     return;
   }
   await createCanvas();
-  //initializeWebRTC(renderer, "hallo");
+  webrtc = initializeWebRTC();
 
 
   scene = new Scene();
@@ -98,6 +98,15 @@ function RegisterListeners() {
  * our scene and rendering.
  */
 function update() {
+
+  console.log(camera.toJSON())
+
+  webrtc.sendDirectlyToAll('chat', 'message', {
+    direction: camera.getWorldDirection(new Vector3()),
+    position: camera.position,
+    type: 'arPosition',
+
+  })
   // Clears color from the frame before rendering the camera (arView) or scene.
   renderer.clearColor();
 
