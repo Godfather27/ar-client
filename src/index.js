@@ -16,25 +16,29 @@ import { ARUtils, ARPerspectiveCamera, ARView } from 'three.ar.js';
 import VRControls from './VRControls';
 import { initializeWebRTC } from './webrtc';
 
-
-
-const SCALE_FACTOR = 0.25;
+const SCALE_FACTOR = 0.75;
 const MARKER_SIZE = new Vector3(0.01, 0.01, 0.01);
 const raycaster = new Raycaster();
-const HIGHLIGHT_COLOR = 0xffffff;
+const HIGHLIGHT_COLOR = 0xcc0000;
 const createCubeButton = document.querySelector('#spawn')
 const deleteCubeButton = document.querySelector('#delete')
 const resetButton = document.querySelector('#reset')
 const drawButton = document.querySelector('#draw')
 
-let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, selected, lineGeometry, lineMesh, webrtc;
+let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, newScale, selected, lineGeometry, lineMesh, webrtc, deviceTilt;
 let touching = false;
+let creating = false;
 let moving = false;
 let draw = false;
 let canvasPoints = [];
 let canvasMarkers = [];
 
- async function init() {
+window.addEventListener("deviceorientation", handleOrientation, true);
+function handleOrientation(event) {
+  deviceTilt = event.gamma;
+}
+
+async function init() {
   const display = await ARUtils.getARDisplay();
   if (display) {
     vrDisplay = display;
@@ -60,12 +64,9 @@ let canvasMarkers = [];
 
   // LINE
   lineGeometry = new Geometry();
-  lineGeometry.vertices.push(new Vector3( -10, 0, 0) );
-  lineGeometry.vertices.push(new Vector3( 0, 10, 0) );
-  lineGeometry.vertices.push(new Vector3( 10, 0, 0) );
   let lineMaterial = new LineBasicMaterial( {
     color: 0xff0000,
-    linewidth: 1
+    linewidth: 5
   } )
   lineMaterial.defaultColor = 0xff0000
   lineMesh = new Line(lineGeometry, lineMaterial);
@@ -97,59 +98,11 @@ function RegisterListeners() {
  * The render loop, called once per frame. Handles updating
  * our scene and rendering.
  */
-function update() {
 
-  console.log(camera.toJSON())
 
-  webrtc.sendDirectlyToAll('chat', 'message', {
-    direction: camera.getWorldDirection(new Vector3()),
-    position: camera.position,
-    type: 'arPosition',
-
-  })
-  // Clears color from the frame before rendering the camera (arView) or scene.
-  renderer.clearColor();
-
-  // Render the device's camera stream on screen first of all.
-  // It allows to get the right pose synchronized with the right frame.
-  arView.render();
-
-  // Update our camera projection matrix in the event that
-  // the near or far planes have updated
-  camera.updateProjectionMatrix();
-
-  // Update our perspective camera's positioning
-  vrControls.update();
-
-  if (touching) growCube();
-
-  if (selected && moving) moveCube();
-
-<<<<<<< HEAD
-  if (!moving) selectCube();
-=======
-  if(!moving)
-    cast()
->>>>>>> add drawing function
-
-  // Render our three.js virtual scene
-  renderer.clearDepth();
-  renderer.render(scene, camera);
-
-  // Kick off the requestAnimationFrame to call this function
-  // when a new VRDisplay frame is rendered
-  vrDisplay.requestAnimationFrame(update);
-}
-
-<<<<<<< HEAD
-function selectCube() {
-  const raycaster = new Raycaster(camera.position, camera.getWorldDirection(new Vector3()));
-  const intersections = raycaster.intersectObjects(scene.children);
-=======
 function cast() {
   raycaster.set(camera.position, camera.getWorldDirection(new Vector3()))
   const intersections = raycaster.intersectObjects( scene.children )
->>>>>>> add drawing function
 
   selectCube(intersections)
   if(draw)
@@ -159,7 +112,6 @@ function cast() {
 function drawLine(intersections) {
   if(intersections[0]){
     // WRONG POINTS? WRONG SPACE?
-    console.log(intersections[0].point)
     lineGeometry.vertices.push(intersections[0].point);
     lineGeometry.verticesNeedUpdate = true;
   }
@@ -179,18 +131,13 @@ function selectCube(intersections) {
   }
 }
 
-function cubeFactory({ size, spawnPosition = null, color = 0x00ff00 }) {
+function cubeFactory({ size, spawnPosition = null, color = 0xdddddd }) {
   const geometry = new BoxGeometry(size.x, size.y, size.z);
   const material = new MeshBasicMaterial({ color });
   material.defaultColor = color;
-<<<<<<< HEAD
-  const cube = new Mesh(geometry, material);
-  scene.add(cube);
-=======
   let cube = new Mesh( geometry, material );
   cube.isDrawable = true;
   scene.add( cube );
->>>>>>> add drawing function
 
   // set cube position relative to camera
   const cameraDirection = camera.getWorldDirection(new Vector3());
@@ -214,6 +161,7 @@ function moveCube() {
 }
 
 function growCube() {
+  newScale *= 1.015;
   newCube.geometry.scale(1.015, 1.015, 1.015);
 }
 
@@ -239,32 +187,20 @@ function setCanvasPoint() {
 }
 
 function removeCanvasMarker() {
-  canvasMarkers.forEach(deleteMesh);
+  canvasMarkers.forEach(deleteMarker);
   canvasMarkers.length = 0;
 }
 
 function createCanvasPlane() {
   const geometry = new Geometry();
   geometry.vertices.push(...canvasPoints);
-<<<<<<< HEAD
   geometry.faces.push(new Face3(0, 1, 2), new Face3(2, 3, 0));
-  const material = new MeshBasicMaterial({ color: 0xffff00, side: DoubleSide });
-  material.defaultColor = 0xffff00;
-  const canvasMesh = new Mesh(geometry, material);
-  scene.add(canvasMesh);
-  return canvasMesh;
-=======
-  geometry.faces.push(
-    new Face3(0, 1, 2),
-    new Face3(2, 3, 0)
-  );
-  let material = new MeshBasicMaterial({color: 0xffff00, side: DoubleSide});
-  material.defaultColor = 0xffff00
+  let material = new MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.5, side: DoubleSide});
+  material.defaultColor = 0xffffff;
   let mesh = new Mesh(geometry, material);
   mesh.isDrawable = true;
   scene.add(mesh);
   return mesh;
->>>>>>> add drawing function
 }
 
 // EVENT FUNCTIONS
@@ -288,6 +224,7 @@ function onTouchEnd() {
 
 function createCube() {
   touching = true;
+  newScale = 0.1;
   newCube = cubeFactory({
     size: {
       x: 0.1,
@@ -299,18 +236,25 @@ function createCube() {
 
 function endCubeScaling() {
   touching = false;
+  creating = true;
 }
 
-function deleteMesh(mesh) {
-  if (mesh) {
-    if (!mesh.isMesh) {
-      mesh = selected;
-      selected = undefined;
-    }
-    scene.remove(mesh);
-    if(mesh.geometry) mesh.geometry.dispose();
-    if(mesh.material) mesh.material.dispose();
-    mesh = undefined;
+function deleteMarker(mesh){
+  scene.remove(mesh);
+  if(mesh.geometry) mesh.geometry.dispose();
+  if(mesh.material) mesh.material.dispose();
+}
+
+function deleteMesh() {
+  if(selected){
+    scene.remove(selected);
+    if(selected.geometry) selected.geometry.dispose();
+    if(selected.material) selected.material.dispose();
+    webrtc.sendDirectlyToAll('chat','message', {
+      type: 'deleteBox',
+      uuid: selected.uuid,
+    });
+    selected = undefined;
   }
 }
 
@@ -318,9 +262,6 @@ function reset() {
   location.reload();
 }
 
-<<<<<<< HEAD
-document.addEventListener('DOMContentLoaded', () => {
-=======
 function toggleDrawmode() {
   draw = !draw;
   if(draw) {
@@ -331,6 +272,62 @@ function toggleDrawmode() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
->>>>>>> add drawing function
   init();
 });
+
+
+function update() {
+
+  webrtc.sendDirectlyToAll('chat', 'message', {
+    direction: camera.getWorldDirection(new Vector3()),
+    deviceTilt,
+    position: camera.position,
+    type: 'arPosition',
+  })
+  // Clears color from the frame before rendering the camera (arView) or scene.
+  renderer.clearColor();
+
+  // Render the device's camera stream on screen first of all.
+  // It allows to get the right pose synchronized with the right frame.
+  arView.render();
+
+  // Update our camera projection matrix in the event that
+  // the near or far planes have updated
+  camera.updateProjectionMatrix();
+
+  // Update our perspective camera's positioning
+  vrControls.update();
+
+  if (touching) growCube();
+  if (creating){
+    const id = generateQuickGuid();
+    var position = new Vector3();
+    position.getPositionFromMatrix( newCube.matrixWorld );
+    webrtc.sendDirectlyToAll('chat', 'message', {
+      scale: newScale,
+      rotation: newCube.rotation,
+      position: newCube.position,
+      type: 'arBox',
+      id: newCube.uuid
+    });
+    creating = false;
+  }
+
+  if (selected && moving) moveCube();
+
+  if(!moving)
+    cast()
+
+  // Render our three.js virtual scene
+  renderer.clearDepth();
+  renderer.render(scene, camera);
+
+  // Kick off the requestAnimationFrame to call this function
+  // when a new VRDisplay frame is rendered
+  vrDisplay.requestAnimationFrame(update);
+}
+
+function generateQuickGuid() {
+  return Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15);
+}
