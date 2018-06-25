@@ -1,29 +1,17 @@
-import {
-  WebGLRenderer,
-  Scene,
-  BoxGeometry,
-  Geometry,
-  DoubleSide,
-  LineBasicMaterial,
-  MeshBasicMaterial,
-  Raycaster,
-  Mesh,
-  Line,
-  Vector3,
-  Face3,
-} from 'three';
+import * as THREE from 'three';
 import { ARUtils, ARPerspectiveCamera, ARView } from 'three.ar.js';
 import VRControls from './VRControls';
 import { initializeWebRTC } from './webrtc';
 
 const SCALE_FACTOR = 0.75;
-const MARKER_SIZE = new Vector3(0.01, 0.01, 0.01);
-const raycaster = new Raycaster();
+const MARKER_SIZE = new THREE.Vector3(0.01, 0.01, 0.01);
+const raycaster = new THREE.Raycaster();
 const HIGHLIGHT_COLOR = 0xcc0000;
 const createCubeButton = document.querySelector('#spawn')
 const deleteCubeButton = document.querySelector('#delete')
 const resetButton = document.querySelector('#reset')
 const drawButton = document.querySelector('#draw')
+const cubes = new THREE.Group();
 
 let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, newScale, selected, lineGeometry, lineMesh, webrtc, deviceTilt;
 let touching = false;
@@ -50,7 +38,7 @@ async function init() {
   webrtc = initializeWebRTC();
 
 
-  scene = new Scene();
+  scene = new THREE.Scene();
   arView = new ARView(vrDisplay, renderer);
   camera = new ARPerspectiveCamera(
     vrDisplay,
@@ -60,22 +48,14 @@ async function init() {
     100,
   );
   vrControls = new VRControls(camera);
+  scene.add(cubes);
   RegisterListeners();
 
-  // LINE
-  lineGeometry = new Geometry();
-  let lineMaterial = new LineBasicMaterial( {
-    color: 0xff0000,
-    linewidth: 5
-  } )
-  lineMaterial.defaultColor = 0xff0000
-  lineMesh = new Line(lineGeometry, lineMaterial);
-  scene.add(lineMesh);
   update();
 }
 
 function createCanvas() {
-  renderer = new WebGLRenderer({ alpha: true });
+  renderer = new THREE.WebGLRenderer({ alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.autoClear = false;
@@ -100,20 +80,49 @@ function RegisterListeners() {
  */
 
 
+let index;
 function cast() {
-  raycaster.set(camera.position, camera.getWorldDirection(new Vector3()))
-  const intersections = raycaster.intersectObjects( scene.children )
+  raycaster.set(camera.position, camera.getWorldDirection(new THREE.Vector3()))
+  const intersections = raycaster.intersectObjects( cubes.children )
 
   selectCube(intersections)
-  if(draw)
-    drawLine(intersections.filter(element => element.object.isDrawable))
+  if(draw && !lineGeometry){
+    index = 0;
+    lineGeometry = new THREE.CatmullRomCurve3();
+    let geometry = new THREE.BufferGeometry();
+    let points = 500;
+    let positions = new Float32Array( points * 3 ); // 3 vertices per point
+    geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+    geometry.setDrawRange( 1, 1 );
+    let lineMaterial = new THREE.LineBasicMaterial( {
+      color: 0xcc3322,
+      linewidth: 5,
+      linecap: 'round', //ignored by WebGLRenderer
+      linejoin:  'round' 
+    } )
+    lineMaterial.defaultColor = 0xff0000
+    lineMesh = new THREE.Line(geometry, lineMaterial);
+    scene.add(lineMesh);
+    drawLine(intersections.filter(element => element.object.isDrawable), index);
+  } else if(draw && lineGeometry){
+    drawLine(intersections.filter(element => element.object.isDrawable), index);
+    index += 3;
+  } else{
+    lineGeometry = undefined;
+  }
 }
 
-function drawLine(intersections) {
+function drawLine(intersections, index) {
   if(intersections[0]){
     // WRONG POINTS? WRONG SPACE?
-    lineGeometry.vertices.push(intersections[0].point);
-    lineGeometry.verticesNeedUpdate = true;
+    //lineGeometry.vertices.push(intersections[0].point);
+    console.log(lineMesh.geometry.attributes.position.array, index);
+    lineMesh.geometry.attributes.position.array[index] = intersections[0].point.x;
+    lineMesh.geometry.attributes.position.array[index+1] = intersections[0].point.y;
+    lineMesh.geometry.attributes.position.array[index+2] = intersections[0].point.z;
+    lineMesh.geometry.attributes.position.needsUpdate = true;
+    lineMesh.geometry.setDrawRange( 1, index+2 );
+    //lineGeometry.verticesNeedUpdate = true;
   }
 }
 
@@ -132,15 +141,15 @@ function selectCube(intersections) {
 }
 
 function cubeFactory({ size, spawnPosition = null, color = 0xdddddd }) {
-  const geometry = new BoxGeometry(size.x, size.y, size.z);
-  const material = new MeshBasicMaterial({ color });
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5});
   material.defaultColor = color;
-  let cube = new Mesh( geometry, material );
+  let cube = new THREE.Mesh( geometry, material );
   cube.isDrawable = true;
-  scene.add( cube );
+  cubes.add( cube );
 
   // set cube position relative to camera
-  const cameraDirection = camera.getWorldDirection(new Vector3());
+  const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
   spawnPosition = spawnPosition || {
     x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
     y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
@@ -151,7 +160,7 @@ function cubeFactory({ size, spawnPosition = null, color = 0xdddddd }) {
 }
 
 function moveCube() {
-  const cameraDirection = camera.getWorldDirection(new Vector3());
+  const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
   const spawnPosition = {
     x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
     y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
@@ -166,8 +175,8 @@ function growCube() {
 }
 
 function setCanvasPoint() {
-  const cameraDirection = camera.getWorldDirection(new Vector3());
-  const point = new Vector3(
+  const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+  const point = new THREE.Vector3(
     camera.position.x + cameraDirection.x * SCALE_FACTOR,
     camera.position.y + cameraDirection.y * SCALE_FACTOR,
     camera.position.z + cameraDirection.z * SCALE_FACTOR,
@@ -192,12 +201,12 @@ function removeCanvasMarker() {
 }
 
 function createCanvasPlane() {
-  const geometry = new Geometry();
+  const geometry = new THREE.Geometry();
   geometry.vertices.push(...canvasPoints);
-  geometry.faces.push(new Face3(0, 1, 2), new Face3(2, 3, 0));
-  let material = new MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.5, side: DoubleSide});
+  geometry.faces.push(new THREE.Face3(0, 1, 2), new THREE.Face3(2, 3, 0));
+  let material = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide});
   material.defaultColor = 0xffffff;
-  let mesh = new Mesh(geometry, material);
+  let mesh = new THREE.Mesh(geometry, material);
   mesh.isDrawable = true;
   scene.add(mesh);
   return mesh;
@@ -240,7 +249,7 @@ function endCubeScaling() {
 }
 
 function deleteMarker(mesh){
-  scene.remove(mesh);
+  cubes.remove(mesh);
   if(mesh.geometry) mesh.geometry.dispose();
   if(mesh.material) mesh.material.dispose();
 }
@@ -279,7 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function update() {
 
   webrtc.sendDirectlyToAll('chat', 'message', {
-    direction: camera.getWorldDirection(new Vector3()),
+    direction: camera.getWorldDirection(new THREE.Vector3()),
     deviceTilt,
     position: camera.position,
     type: 'arPosition',
@@ -300,8 +309,7 @@ function update() {
 
   if (touching) growCube();
   if (creating){
-    const id = generateQuickGuid();
-    var position = new Vector3();
+    var position = new THREE.Vector3();
     position.getPositionFromMatrix( newCube.matrixWorld );
     webrtc.sendDirectlyToAll('chat', 'message', {
       scale: newScale,
@@ -325,9 +333,4 @@ function update() {
   // Kick off the requestAnimationFrame to call this function
   // when a new VRDisplay frame is rendered
   vrDisplay.requestAnimationFrame(update);
-}
-
-function generateQuickGuid() {
-  return Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15);
 }
