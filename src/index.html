@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0 user-scalable=no">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <script src="https://simplewebrtc.com/latest-v2.js"></script>
   <title>
@@ -93,6 +93,15 @@
         border-radius: 50%;
         border: 2px black solid;
         background: none;
+      }
+      *{
+        -webkit-touch-callout: none; /* iOS Safari */
+          -webkit-user-select: none; /* Safari */
+          -khtml-user-select: none; /* Konqueror HTML */
+            -moz-user-select: none; /* Firefox */
+              -ms-user-select: none; /* Internet Explorer/Edge */
+                  user-select: none; /* Non-prefixed version, currently
+                                        supported by Chrome and Opera */
       }
   </style>
 </head>
