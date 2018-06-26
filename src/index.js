@@ -222,7 +222,7 @@ function onTouchStart() {
   if (selected) {
     currentState.moving = true;
   } else {
-    setCanvasPoint();
+    //setCanvasPoint();
   }
 }
 
