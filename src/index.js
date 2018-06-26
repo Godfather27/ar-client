@@ -231,6 +231,7 @@ function onTouchEnd() {
 }
 
 function createCube() {
+  ui.createCubeButton.classList.add("activeButton");
   currentState.touching = true;
   newScale = 0.1;
   newCube = cubeFactory({
@@ -245,6 +246,7 @@ function createCube() {
 function endCubeScaling() {
   currentState.touching = false;
   currentState.creating = true;
+  ui.createCubeButton.classList.remove("activeButton");
 }
 
 function deleteMarker(mesh) {
@@ -273,9 +275,9 @@ function reset() {
 function toggleDrawmode() {
   currentState.draw = !currentState.draw;
   if (currentState.draw) {
-    ui.drawButton.style.background = "#00FF00";
+    ui.drawButton.classList.add("activeButton");
   } else {
-    ui.drawButton.style.background = "#FFFFFF";
+    ui.drawButton.classList.remove("activeButton");
   }
 }
 
