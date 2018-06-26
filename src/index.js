@@ -122,7 +122,7 @@ function selectCube(intersections) {
   // reset cube color to default
   if (
     selected &&
-    (!intersections.length || selected.uuid !== intersections[0].object.uui)
+    (!intersections.length || selected.uuid !== intersections[0].object.uuid)
   ) {
     selected.material.color.setHex(selected.material.defaultColor);
     selected = null;
@@ -138,7 +138,7 @@ function selectCube(intersections) {
 function cubeFactory({ size, spawnPosition = null, color = 0xdddddd }) {
   const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 
-  let cube = new THREE.Mesh(geometry, materials.cubes);
+  let cube = new THREE.Mesh(geometry, materials.cubes.clone());
   cube.isDrawable = true;
   cubes.add(cube);
 
@@ -330,6 +330,9 @@ function attachToCube(child, scene, parent) {
 //* DRAWING
 
 function draw(intersections) {
+  if(lineMesh && (lineMesh.parent !== selected)){
+    lineGeometry = undefined;
+  }
   if (currentState.draw && !lineGeometry && selected) {
     createLine();
     drawLine(

@@ -19,7 +19,7 @@ function initializeWebRTC() {
   // });
 
   webrtc.joinRoom("fh-salzburg-ar-vr", function() {
-    console.log("joined");
+
   });
 
   return webrtc;
