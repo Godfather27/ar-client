@@ -55,7 +55,17 @@ async function init() {
     return;
   }
   await createCanvas();
-  webrtc = initializeWebRTC();
+  webrtc = await initializeWebRTC();
+
+  webrtc.on("channelMessage", (peer, channel, data) => {
+    if (channel === "chat") {
+      if(data.payload.type === 'addPoint') drawForeignLine(data.payload);
+      if(data.payload.type === 'moveCube') foreignMoveCube(data.payload);
+    }
+  });
+
+
+  
 
   scene = new THREE.Scene();
   arView = new ARView(vrDisplay, renderer);
@@ -201,7 +211,7 @@ function createCanvasPlane() {
   return mesh;
 }
 
-// EVENT FUNCTIONS
+
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -269,6 +279,8 @@ function toggleDrawmode() {
   }
 }
 
+//* RENDER LOOP
+
 function update() {
   sendToVR({
     direction: camera.getWorldDirection(new THREE.Vector3()),
@@ -313,9 +325,6 @@ function attachToCube(child, scene, parent) {
   parent.add(child);
 }
 
-
-
-
 //* DRAWING
 
 function draw(intersections) {
@@ -336,7 +345,7 @@ function draw(intersections) {
   }
 }
 
-function createLine() {
+function createLine(boxId = undefined) {
   bufferIterator = 0;
   lineGeometry = new THREE.BufferGeometry();
   lineGeometry.addAttribute(
@@ -346,7 +355,11 @@ function createLine() {
   lineGeometry.setDrawRange(0, 0);
   lineMesh = new THREE.Line(lineGeometry, materials.lines);
   scene.add(lineMesh);
-  attachToCube(lineMesh, scene, selected);
+  if(boxId){
+    attachToCube(lineMesh, scene, cubes.getObjectByProperty("uuid", boxId));
+  } else {
+    attachToCube(lineMesh, scene, selected);
+  }
 }
 
 function drawLine([intersection = undefined], bufferIterator) {
@@ -366,4 +379,29 @@ function drawLine([intersection = undefined], bufferIterator) {
       point: intersection.point
     });
   }
+}
+
+//*  Foreign Controls
+
+const foreignLines = new Set();
+function drawForeignLine(data) {
+  if (!foreignLines.has(data.lineId)) {
+    if(!cubes.getObjectByProperty("uuid", data.boxId)) return;
+    createLine(data.boxId);
+    foreignLines.add(data.lineId);
+  } else {
+
+    lineMesh.geometry.attributes.position.array[bufferIterator] = data.point.x;
+    lineMesh.geometry.attributes.position.array[bufferIterator + 1] = data.point.y;
+    lineMesh.geometry.attributes.position.array[bufferIterator + 2] = data.point.z;
+    lineMesh.geometry.attributes.position.needsUpdate = true;
+    lineMesh.geometry.setDrawRange(0, bufferIterator / 3);
+    bufferIterator += 3;
+  }
+}
+
+function foreignMoveCube(data) {
+  const cube = cubes.getObjectByProperty("uuid", data.boxId)
+  if(!cube) return;
+  cube.position.set(data.position.x, data.position.y, data.position.z);
 }
