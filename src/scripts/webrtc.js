@@ -1,7 +1,7 @@
 let webrtc;
 
 function initializeWebRTC() {
- 
+
 
   webrtc = new SimpleWebRTC({
 
@@ -18,7 +18,7 @@ function initializeWebRTC() {
   //   }
   // });
 
-  webrtc.joinRoom("fh-salzburg-ar-vr", function() {
+  webrtc.joinRoom(new URL(window.location.href).searchParams.get('roomName') || 'fh-salzburg-ar-vr', function() {
 
   });
 
