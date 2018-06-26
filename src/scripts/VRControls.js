@@ -12,7 +12,7 @@ export default class VRControls {
     
     // If true will use "standing space" coordinate system where y=0 is the
     // floor and x=0, z=0 is the center of the room.
-    this.standing = false;
+    this.standing = true;
 
     // Distance from the users eyes to the floor in meters. Used when
     // standing=true but the VRDisplay doesn't provide stageParameters.

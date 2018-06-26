@@ -25,4 +25,8 @@ function initializeWebRTC() {
   return webrtc;
 }
 
-export { initializeWebRTC };
+function sendToVR(data) {
+  webrtc.sendDirectlyToAll("chat", "message", data);
+}
+
+export { initializeWebRTC, sendToVR };

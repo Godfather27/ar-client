@@ -1,30 +1,50 @@
-import * as THREE from 'three';
-import { ARUtils, ARPerspectiveCamera, ARView } from 'three.ar.js';
-import VRControls from './VRControls';
-import { initializeWebRTC } from './webrtc';
+import * as THREE from "three";
+import { ARUtils, ARPerspectiveCamera, ARView } from "three.ar.js";
+import VRControls from "./scripts/VRControls";
+import { initializeWebRTC, sendToVR } from "./scripts/webrtc";
+import materials from "./scripts/materials";
+import ui from "./scripts/ui";
 
 const SCALE_FACTOR = 0.75;
 const MARKER_SIZE = new THREE.Vector3(0.01, 0.01, 0.01);
 const raycaster = new THREE.Raycaster();
-const HIGHLIGHT_COLOR = 0xcc0000;
-const createCubeButton = document.querySelector('#spawn')
-const deleteCubeButton = document.querySelector('#delete')
-const resetButton = document.querySelector('#reset')
-const drawButton = document.querySelector('#draw')
+const HIGHLIGHT_COLOR = 0xa7bd5b;
+const LINE_CUBE_DISTANCE = 0.005;
+
 const cubes = new THREE.Group();
 
-let vrDisplay, vrControls, arView, camera, renderer, scene, newCube, newScale, selected, lineGeometry, lineMesh, webrtc, deviceTilt;
-let touching = false;
-let creating = false;
-let moving = false;
-let draw = false;
+let vrDisplay,
+  vrControls,
+  arView,
+  camera,
+  renderer,
+  scene,
+  newCube,
+  newScale,
+  selected,
+  lineMesh,
+  lineGeometry,
+  webrtc,
+  deviceTilt,
+  bufferIterator;
+
 let canvasPoints = [];
 let canvasMarkers = [];
+const currentState = {
+  touching: false,
+  creating: false,
+  moving: false,
+  draw: false
+};
 
 window.addEventListener("deviceorientation", handleOrientation, true);
 function handleOrientation(event) {
   deviceTilt = event.gamma;
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  init();
+});
 
 async function init() {
   const display = await ARUtils.getARDisplay();
@@ -37,7 +57,6 @@ async function init() {
   await createCanvas();
   webrtc = initializeWebRTC();
 
-
   scene = new THREE.Scene();
   arView = new ARView(vrDisplay, renderer);
   camera = new ARPerspectiveCamera(
@@ -45,10 +64,18 @@ async function init() {
     60,
     window.innerWidth / window.innerHeight,
     0.01,
-    100,
+    100
   );
   vrControls = new VRControls(camera);
   scene.add(cubes);
+
+  let light = new THREE.PointLight(0xffffff, 0.5);
+  light.position.set(10, 10, 10);
+  scene.add(light);
+  let light2 = new THREE.PointLight(0xffffff, 0.3);
+  light2.position.set(-10, 10, -10);
+  scene.add(light2);
+
   RegisterListeners();
 
   update();
@@ -64,71 +91,29 @@ function createCanvas() {
 }
 
 function RegisterListeners() {
-  window.addEventListener('resize', onWindowResize, false);
-  createCubeButton.addEventListener('touchstart', createCube);
-  createCubeButton.addEventListener('touchend', endCubeScaling);
-  deleteCubeButton.addEventListener('touchend', deleteMesh);
-  drawButton.addEventListener('touchend', toggleDrawmode);
-  resetButton.addEventListener('touchend', reset);
-  renderer.domElement.addEventListener('touchstart', onTouchStart);
-  renderer.domElement.addEventListener('touchend', onTouchEnd);
+  window.addEventListener("resize", onWindowResize, false);
+  ui.createCubeButton.addEventListener("touchstart", createCube);
+  ui.createCubeButton.addEventListener("touchend", endCubeScaling);
+  ui.deleteCubeButton.addEventListener("touchend", deleteMesh);
+  ui.drawButton.addEventListener("touchend", toggleDrawmode);
+  ui.resetButton.addEventListener("touchend", reset);
+  renderer.domElement.addEventListener("touchstart", onTouchStart);
+  renderer.domElement.addEventListener("touchend", onTouchEnd);
 }
 
-/**
- * The render loop, called once per frame. Handles updating
- * our scene and rendering.
- */
-
-
-let index;
 function cast() {
-  raycaster.set(camera.position, camera.getWorldDirection(new THREE.Vector3()))
-  const intersections = raycaster.intersectObjects( cubes.children )
-
-  selectCube(intersections)
-  if(draw && !lineGeometry){
-    index = 0;
-    lineGeometry = new THREE.CatmullRomCurve3();
-    let geometry = new THREE.BufferGeometry();
-    let points = 500;
-    let positions = new Float32Array( points * 3 ); // 3 vertices per point
-    geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
-    geometry.setDrawRange( 1, 1 );
-    let lineMaterial = new THREE.LineBasicMaterial( {
-      color: 0xcc3322,
-      linewidth: 5,
-      linecap: 'round', //ignored by WebGLRenderer
-      linejoin:  'round' 
-    } )
-    lineMaterial.defaultColor = 0xff0000
-    lineMesh = new THREE.Line(geometry, lineMaterial);
-    scene.add(lineMesh);
-    drawLine(intersections.filter(element => element.object.isDrawable), index);
-  } else if(draw && lineGeometry){
-    drawLine(intersections.filter(element => element.object.isDrawable), index);
-    index += 3;
-  } else{
-    lineGeometry = undefined;
-  }
-}
-
-function drawLine(intersections, index) {
-  if(intersections[0]){
-    // WRONG POINTS? WRONG SPACE?
-    //lineGeometry.vertices.push(intersections[0].point);
-    console.log(lineMesh.geometry.attributes.position.array, index);
-    lineMesh.geometry.attributes.position.array[index] = intersections[0].point.x;
-    lineMesh.geometry.attributes.position.array[index+1] = intersections[0].point.y;
-    lineMesh.geometry.attributes.position.array[index+2] = intersections[0].point.z;
-    lineMesh.geometry.attributes.position.needsUpdate = true;
-    lineMesh.geometry.setDrawRange( 1, index+2 );
-    //lineGeometry.verticesNeedUpdate = true;
-  }
+  raycaster.set(camera.position, camera.getWorldDirection(new THREE.Vector3()));
+  const intersections = raycaster.intersectObjects(cubes.children);
+  selectCube(intersections);
+  return intersections;
 }
 
 function selectCube(intersections) {
   // reset cube color to default
-  if (selected && (!intersections.length || selected.uuid !== intersections[0].object.uui)) {
+  if (
+    selected &&
+    (!intersections.length || selected.uuid !== intersections[0].object.uui)
+  ) {
     selected.material.color.setHex(selected.material.defaultColor);
     selected = null;
   }
@@ -142,18 +127,17 @@ function selectCube(intersections) {
 
 function cubeFactory({ size, spawnPosition = null, color = 0xdddddd }) {
   const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
-  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5});
-  material.defaultColor = color;
-  let cube = new THREE.Mesh( geometry, material );
+
+  let cube = new THREE.Mesh(geometry, materials.cubes);
   cube.isDrawable = true;
-  cubes.add( cube );
+  cubes.add(cube);
 
   // set cube position relative to camera
   const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
   spawnPosition = spawnPosition || {
     x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
     y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
-    z: camera.position.z + cameraDirection.z * SCALE_FACTOR,
+    z: camera.position.z + cameraDirection.z * SCALE_FACTOR
   };
   cube.position.set(spawnPosition.x, spawnPosition.y, spawnPosition.z);
   return cube;
@@ -164,9 +148,14 @@ function moveCube() {
   const spawnPosition = {
     x: camera.position.x + cameraDirection.x * SCALE_FACTOR,
     y: camera.position.y + cameraDirection.y * SCALE_FACTOR,
-    z: camera.position.z + cameraDirection.z * SCALE_FACTOR,
+    z: camera.position.z + cameraDirection.z * SCALE_FACTOR
   };
   selected.position.set(spawnPosition.x, spawnPosition.y, spawnPosition.z);
+  sendToVR({
+    type: "moveBox",
+    position: spawnPosition,
+    boxId: selected.uuid
+  });
 }
 
 function growCube() {
@@ -179,14 +168,16 @@ function setCanvasPoint() {
   const point = new THREE.Vector3(
     camera.position.x + cameraDirection.x * SCALE_FACTOR,
     camera.position.y + cameraDirection.y * SCALE_FACTOR,
-    camera.position.z + cameraDirection.z * SCALE_FACTOR,
+    camera.position.z + cameraDirection.z * SCALE_FACTOR
   );
   canvasPoints.push(point);
-  canvasMarkers.push(cubeFactory({
-    size: MARKER_SIZE,
-    spawnPosition: point,
-    color: 0xff0000,
-  }));
+  canvasMarkers.push(
+    cubeFactory({
+      size: MARKER_SIZE,
+      spawnPosition: point,
+      color: 0xff0000
+    })
+  );
 
   if (canvasPoints.length === 4) {
     createCanvasPlane();
@@ -204,9 +195,7 @@ function createCanvasPlane() {
   const geometry = new THREE.Geometry();
   geometry.vertices.push(...canvasPoints);
   geometry.faces.push(new THREE.Face3(0, 1, 2), new THREE.Face3(2, 3, 0));
-  let material = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide});
-  material.defaultColor = 0xffffff;
-  let mesh = new THREE.Mesh(geometry, material);
+  let mesh = new THREE.Mesh(geometry, materials.canvasPlanes);
   mesh.isDrawable = true;
   scene.add(mesh);
   return mesh;
@@ -221,47 +210,47 @@ function onWindowResize() {
 
 function onTouchStart() {
   if (selected) {
-    moving = true;
+    currentState.moving = true;
   } else {
     setCanvasPoint();
   }
 }
 
 function onTouchEnd() {
-  moving = false;
+  currentState.moving = false;
 }
 
 function createCube() {
-  touching = true;
+  currentState.touching = true;
   newScale = 0.1;
   newCube = cubeFactory({
     size: {
       x: 0.1,
       y: 0.1,
-      z: 0.1,
-    },
+      z: 0.1
+    }
   });
 }
 
 function endCubeScaling() {
-  touching = false;
-  creating = true;
+  currentState.touching = false;
+  currentState.creating = true;
 }
 
-function deleteMarker(mesh){
+function deleteMarker(mesh) {
   cubes.remove(mesh);
-  if(mesh.geometry) mesh.geometry.dispose();
-  if(mesh.material) mesh.material.dispose();
+  if (mesh.geometry) mesh.geometry.dispose();
+  if (mesh.material) mesh.material.dispose();
 }
 
 function deleteMesh() {
-  if(selected){
-    scene.remove(selected);
-    if(selected.geometry) selected.geometry.dispose();
-    if(selected.material) selected.material.dispose();
-    webrtc.sendDirectlyToAll('chat','message', {
-      type: 'deleteBox',
-      uuid: selected.uuid,
+  if (selected) {
+    cubes.remove(selected);
+    if (selected.geometry) selected.geometry.dispose();
+    if (selected.material) selected.material.dispose();
+    sendToVR({
+      type: "deleteBox",
+      uuid: selected.uuid
     });
     selected = undefined;
   }
@@ -272,65 +261,109 @@ function reset() {
 }
 
 function toggleDrawmode() {
-  draw = !draw;
-  if(draw) {
-    drawButton.style.background = "#00FF00";
+  currentState.draw = !currentState.draw;
+  if (currentState.draw) {
+    ui.drawButton.style.background = "#00FF00";
   } else {
-    drawButton.style.background = "#FFFFFF";
+    ui.drawButton.style.background = "#FFFFFF";
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  init();
-});
-
-
 function update() {
-
-  webrtc.sendDirectlyToAll('chat', 'message', {
+  sendToVR({
     direction: camera.getWorldDirection(new THREE.Vector3()),
     deviceTilt,
     position: camera.position,
-    type: 'arPosition',
-  })
-  // Clears color from the frame before rendering the camera (arView) or scene.
+    type: "arPosition"
+  });
+
   renderer.clearColor();
-
-  // Render the device's camera stream on screen first of all.
-  // It allows to get the right pose synchronized with the right frame.
   arView.render();
-
-  // Update our camera projection matrix in the event that
-  // the near or far planes have updated
   camera.updateProjectionMatrix();
-
-  // Update our perspective camera's positioning
   vrControls.update();
 
-  if (touching) growCube();
-  if (creating){
-    var position = new THREE.Vector3();
-    position.getPositionFromMatrix( newCube.matrixWorld );
-    webrtc.sendDirectlyToAll('chat', 'message', {
+  if (currentState.touching) growCube();
+  if (currentState.creating) {
+    let position = new THREE.Vector3();
+    position.getPositionFromMatrix(newCube.matrixWorld);
+    sendToVR({
       scale: newScale,
       rotation: newCube.rotation,
       position: newCube.position,
-      type: 'arBox',
+      type: "arBox",
       id: newCube.uuid
     });
-    creating = false;
+    currentState.creating = false;
   }
 
-  if (selected && moving) moveCube();
+  if (selected && currentState.moving) moveCube();
 
-  if(!moving)
-    cast()
-
-  // Render our three.js virtual scene
+  if (!currentState.moving) {
+    const intersections = cast();
+    draw(intersections);
+  }
   renderer.clearDepth();
   renderer.render(scene, camera);
-
-  // Kick off the requestAnimationFrame to call this function
-  // when a new VRDisplay frame is rendered
   vrDisplay.requestAnimationFrame(update);
+}
+
+function attachToCube(child, scene, parent) {
+  child.applyMatrix(new THREE.Matrix4().getInverse(parent.matrixWorld));
+  scene.remove(child);
+  parent.add(child);
+}
+
+
+
+
+//* DRAWING
+
+function draw(intersections) {
+  if (currentState.draw && !lineGeometry && selected) {
+    createLine();
+    drawLine(
+      intersections.filter(element => element.object.isDrawable),
+      bufferIterator
+    );
+  } else if (currentState.draw && lineGeometry && selected) {
+    drawLine(
+      intersections.filter(element => element.object.isDrawable),
+      bufferIterator
+    );
+    bufferIterator += 3;
+  } else {
+    lineGeometry = undefined;
+  }
+}
+
+function createLine() {
+  bufferIterator = 0;
+  lineGeometry = new THREE.BufferGeometry();
+  lineGeometry.addAttribute(
+    "position",
+    new THREE.BufferAttribute(new Float32Array(1500), 3)
+  );
+  lineGeometry.setDrawRange(0, 0);
+  lineMesh = new THREE.Line(lineGeometry, materials.lines);
+  scene.add(lineMesh);
+  attachToCube(lineMesh, scene, selected);
+}
+
+function drawLine([intersection = undefined], bufferIterator) {
+  if (intersection) {
+    lineMesh.geometry.attributes.position.array[bufferIterator] =
+      intersection.point.x + intersection.face.normal.x * LINE_CUBE_DISTANCE;
+    lineMesh.geometry.attributes.position.array[bufferIterator + 1] =
+      intersection.point.y + intersection.face.normal.y * LINE_CUBE_DISTANCE;
+    lineMesh.geometry.attributes.position.array[bufferIterator + 2] =
+      intersection.point.z + intersection.face.normal.z * LINE_CUBE_DISTANCE;
+    lineMesh.geometry.attributes.position.needsUpdate = true;
+    lineMesh.geometry.setDrawRange(0, bufferIterator / 3);
+    sendToVR({
+      lineId: lineMesh.uuid,
+      boxId: selected.uuid,
+      type: "addPoint",
+      point: intersection.point
+    });
+  }
 }
